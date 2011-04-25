@@ -8,6 +8,11 @@ exports.runCommand = runCommand;
 // Public Functions
 //****************************************************
 function connect(client) {
+	// Set the socket if it doesn't exist yet
+	if (!socket) {
+		socket = client.listener;
+	}
+	
 	sessionJoin(client);
 }
 
@@ -32,6 +37,8 @@ var opentok = {
 	sessionId: "156a7a54a8c4714330c86f0be8faf65cfc896a2d",
 	token: "devtoken",
 }
+
+var socket;
 
 var queue = new Array();
 
@@ -78,7 +85,7 @@ function sessionLeave(client) {
 }
 
 //****************************************************
-// User Command Handlers
+// User Command Receivers
 //****************************************************
 var userCommands = {
 	login: userLogin,
@@ -96,13 +103,13 @@ function userLogin(params, client) {
 		params: {
 			user: user,
 		}
-	}
+	};
 	
 	client.send(command);
 }
 
 //****************************************************
-// Queue Command Handlers
+// Queue Command Receivers
 //****************************************************
 var queueCommands = {
 	join: queueJoin,
@@ -123,19 +130,43 @@ function queueJoin(params, client) {
 		}
 	}
 	
-	client.send(command);
-	client.broadcast(command);
+	socket.broadcast(command);
+	
+	if (queue.length == 1) {
+		queueNext();
+	}
 }
 
 function queueLeave(params, client) {
 	var user = params.user;
 	
-	queueRemoveUser(user);
+	queueRemoveUser(user, client);
 }
 
-// Helper function
+//****************************************************
+// Queue Command Senders
+//****************************************************
+function queueNext() {
+	var command = {
+		type: "queue",
+		action: "next",
+		params: {},
+	}
+	
+	var client = socket.clientsIndex[queue[0].id];
+	client.send(command);
+	
+	// TODO: Change this later to call after the last performance is over, but this works for now
+	setTimeout(function() {
+		backstageCheck();
+	}, 10000);
+}
+
+//****************************************************
+// Queue Helper Functions
+//****************************************************
 function queueRemoveUser(user, client) {
-	var index = queue.indexOf(user);
+	var index = queueFindIndex(user);
 	
 	if (index >= 0) {
 		queue.splice(index, 1);
@@ -149,29 +180,97 @@ function queueRemoveUser(user, client) {
 		}
 	}
 	
-	// client.send(command);
-	client.broadcast(command);
+	socket.broadcast(command);
 }
 
+function queueFindIndex(user) {
+	for (var i = 0; i < queue.length; i++) {
+		if (user.id == queue[i].id) return i;
+	}
+	
+	return -1;
+}
 
 //****************************************************
-// Performance Command Handlers
+// Performance Command Receivers
 //****************************************************
-var performanceCommands = {
-	ready: performanceReady,
-	end: performanceEnd,
-}
-commands.inject("performance", performanceCommands);
-
-function performanceReady(params, client) {
+function performanceStart() {
+	var command = {
+		type: "performance",
+		action: "start",
+		params: {
+			performance: performance,
+		}
+	}
 	
+	socket.broadcast(command);
 }
 
-function performanceEnd(params, client) {
+function performanceEnd() {
+	// TODO: Save performance to database
 	
+	var command = {
+		type: "performance",
+		action: "end",
+		params: {
+			performance: performance,
+		}
+	}
+	
+	backstageCheckTimer(15);
 }
 
+//****************************************************
+// Backstage Command Receivers
+//****************************************************
+var backstageCommands = {
+	status: backstageStatus,
+}
+commands.inject("backstage", backstageCommands);
 
+function backstageStatus(params, client) {
+	var ready = params.ready
+	
+	if (ready) {
+		performanceStart();
+	} else {
+		queueNext();
+		backstageCheckTimer(30);
+	}
+}
+
+//****************************************************
+// Backstage Command Senders
+//****************************************************
+function backstageCheck() {
+	var command = {
+		type: "backstage",
+		action: "check",
+		params: {
+			user: queue[0],
+		}
+	}
+	
+	var client = socket.clientsIndex[queue[0].id];
+	
+	client.send(command);
+}
+
+function backstageCheckTimer(seconds) {
+	setTimeout(function() {
+		backstageCheck();
+	}, seconds * 1000);
+	
+	var command = {
+		type: "backstage",
+		action: "checkTimer",
+		params: {
+			user: queue[0],
+		}
+	}
+	
+	socket.send(command);
+}
 
 
 

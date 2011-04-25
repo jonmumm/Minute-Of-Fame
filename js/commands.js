@@ -15,6 +15,7 @@ function validate(command) {
 }
 
 function run(command, client) {
+	console.log(command);
 	if (client) {
 		Commands[command.type][command.action](command.params, client);
 	} else {

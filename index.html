@@ -15,7 +15,16 @@
 
 		var commands = require('./commands');
 		
-		var user;			
+		var opentok;
+		
+		var me;	
+		var queue;
+		
+		var opentok;
+		
+		var stream;
+		
+		var cameraAllowed = false;
 		
 		//****************************************************
 		// Session Command Receivers
@@ -27,9 +36,13 @@
 
 		function sessionJoin(params) {
 			var performance = params.performance;
-			var queue = params.queue;
-			var opentok = params.opentok;
-			user = params.user;
+			opentok = params.opentok;
+			queue = params.queue;
+			me = params.user;
+			
+			for (var i = 0; i < queue.length; i++) {
+				queueAddUserToDisplay(queue[i]);
+			}
 			
 			opentokInit(opentok);
 		}
@@ -44,8 +57,7 @@
 		commands.inject("performance", performanceCommands);
 
 		function performanceStart(params) {
-			var performance = params.performance;
-			
+			var performance = params.performance;			
 		}
 		
 		function performanceEnd(params) {
@@ -65,21 +77,19 @@
 		function queueJoin(params) {
 			var user = params.user;
 			
-			var li = $("<li/>", {
-				text: user.id,
-			});
-
-			li.appendTo("#queue");
+			queueAddUserToDisplay(user);
+			
+			queue.push(user);
 		}
 		
 		function queueLeave(params) {
+			var user = params.user;
 			
+			$("#queue-" + user.id).remove();
 		}
 		
 		function queueNext(params) {
-			// Check if you are the performer, if so move dialog to side
-			
-			// Check if you are on deck, display publish dialog on side
+			backstageEnter();
 		}
 		
 		//****************************************************
@@ -90,13 +100,11 @@
 				type: "queue",
 				action: "join",
 				params: {
-					user: user,
+					user: me,
 				}
 			}
 			
 			socket.send(command);
-			
-			alert('joined');
 			
 			$("#queueButton").unbind("click");
 			$("#queueButton").bind("click", meQueueLeave);
@@ -108,7 +116,7 @@
 				type: "queue",
 				action: "leave",
 				params: {
-					user: user
+					user: me
 				}
 			}
 			
@@ -117,7 +125,76 @@
 			$("#queueButton").unbind("click");
 			$("#queueButton").bind("click", meQueueJoin);
 			$("#queueButton").attr("Value", "Join Queue");
-		}		
+		}
+		
+		//****************************************************
+		// Queue Helper Methods
+		//****************************************************
+		function queueAddUserToDisplay(user) {
+			var li = $("<li/>", {
+				id: "queue-" + user.id,
+				text: user.id,
+			});
+
+			li.appendTo(".queue ol");			
+		}
+		
+		//****************************************************
+		// Backstage Command Receivers
+		//****************************************************
+		var backstageCommands = {
+			check: backstageCheck,
+			checkTimer: backstageCheckTimer
+		}
+		commands.inject("backstage", backstageCommands);
+		
+		function backstageCheck(params) {
+			var ready = cameraAllowed;
+
+			backstageStatus(ready);
+			
+			backstageLeave();
+		}
+		
+		function backstageCheckTimer(params) {
+			var user = params.user;
+			
+			if (me.id == user.id) {
+				
+			} else {
+				
+			}
+			
+			// Start some timer
+		}
+		
+		//****************************************************
+		// Backstage Command Senders
+		//****************************************************
+		function backstageStatus(ready) {
+			var command = {
+				type: "backstage",
+				action: "status",
+				params: {
+					ready: ready,
+				}
+			}
+			
+			socket.send(command);
+		}			
+		
+		//****************************************************
+		// Backstage Helper Functions
+		//****************************************************		
+		function backstageEnter() {			
+			$("#backstageContainer").show('slow');
+			
+			session.publish("publisher");
+		}
+		
+		function backstageLeave() {			
+			$("#backstageContainer").hide('slow');
+		}
 	
 		//****************************************************
 		// OpenTok Functions
@@ -149,9 +226,10 @@
 	
 		var sessionConnectedHandler = function (event) {
 			// TODO: Enable queue join button, move this logic not in opentok section (add another session connect handler)
+			$("#queueButton").attr('disabled', '');
 			$("#queueButton").bind('click', meQueueJoin);
 			
-			user.connectionId = session.connection.connectionId;
+			me.connectionId = session.connection.connectionId;
 			
 			// Publish my stream to the session
 			// publishStream();
@@ -161,6 +239,14 @@
 		}
 
 		var streamCreatedHandler = function (event) {
+			for (var i = 0; i < event.streams.length; i++) {
+				if (event.streams[i].connection.connectionId != session.connection.connectionId) {
+					stream = stream[i];
+				} else {
+					cameraAllowed = true;
+				}
+			}			
+						
 			// Subscribe to the newly created streams
 			// subscribeToStreams(event.streams);
 		}
@@ -226,9 +312,16 @@
 <h1>Minute Of Fame</h1>
 
 	<div id="container">
-		<input type="button" id="queueButton" value="Join Queue"/>
-		<ol id="queue">
-		</ol>
+		<div id="publisher"></div>
+		<div id="backstageContainer" style="display: none;">
+			<h2>Backstage</h2>
+		</div>
+		<div class="queue">
+			<h2>Queue</h2>
+			<input type="button" id="queueButton" value="Join Queue" disabled="disabled"/>
+			<ol>
+			</ol>
+		</div>
 	</div>
 	
 </body>
