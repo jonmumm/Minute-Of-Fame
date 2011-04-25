@@ -140,7 +140,7 @@ function queueJoin(params, client) {
 function queueLeave(params, client) {
 	var user = params.user;
 	
-	queueRemoveUser(user, client);
+	queueRemoveUser(user);
 }
 
 //****************************************************
@@ -155,17 +155,12 @@ function queueNext() {
 	
 	var client = socket.clientsIndex[queue[0].id];
 	client.send(command);
-	
-	// TODO: Change this later to call after the last performance is over, but this works for now
-	setTimeout(function() {
-		backstageCheck();
-	}, 10000);
 }
 
 //****************************************************
 // Queue Helper Functions
 //****************************************************
-function queueRemoveUser(user, client) {
+function queueRemoveUser(user) {
 	var index = queueFindIndex(user);
 	
 	if (index >= 0) {
@@ -229,12 +224,15 @@ var backstageCommands = {
 commands.inject("backstage", backstageCommands);
 
 function backstageStatus(params, client) {
-	var ready = params.ready
+	var ready = params.ready;
+	
+	queueRemoveUser(queue[0]);
+	// TODO: Somewhere here we ahve to check if there are people in the queue before starting the next and backstage timer
+	queueNext();
 	
 	if (ready) {
 		performanceStart();
 	} else {
-		queueNext();
 		backstageCheckTimer(30);
 	}
 }
