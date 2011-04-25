@@ -12,98 +12,210 @@
 	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js" type="text/javascript"></script>
 	
 	<script>
-		(function() {
+
+		var commands = require('./commands');
+		
+		var user;			
+		
+		//****************************************************
+		// Session Command Receivers
+		//****************************************************
+		var sessionCommands = {
+			join: sessionJoin,
+		}
+		commands.inject("session", sessionCommands);
+
+		function sessionJoin(params) {
+			var performance = params.performance;
+			var queue = params.queue;
+			var opentok = params.opentok;
+			user = params.user;
+			
+			opentokInit(opentok);
+		}
+		
+		//****************************************************
+		// Performance Command Receivers
+		//****************************************************
+		var performanceCommands = {
+			start: performanceStart,
+			end: performanceEnd,
+		}
+		commands.inject("performance", performanceCommands);
+
+		function performanceStart(params) {
+			var performance = params.performance;
+			
+		}
+		
+		function performanceEnd(params) {
+			var performance = params.performance;
+		}
+		
+		//****************************************************
+		// Queue Command Receivers
+		//****************************************************
+		var queueCommands = {
+			join: queueJoin,
+			leave: queueLeave,
+			next: queueNext,
+		}
+		commands.inject("queue", queueCommands);
+		
+		function queueJoin(params) {
+			var user = params.user;
+			
+			var li = $("<li/>", {
+				text: user.id,
+			});
+
+			li.appendTo("#queue");
+		}
+		
+		function queueLeave(params) {
+			
+		}
+		
+		function queueNext(params) {
+			// Check if you are the performer, if so move dialog to side
+			
+			// Check if you are on deck, display publish dialog on side
+		}
+		
+		//****************************************************
+		// Queue Command Senders
+		//****************************************************
+		function meQueueJoin() {
+			var command = {
+				type: "queue",
+				action: "join",
+				params: {
+					user: user,
+				}
+			}
+			
+			socket.send(command);
+			
+			alert('joined');
+			
+			$("#queueButton").unbind("click");
+			$("#queueButton").bind("click", meQueueLeave);
+			$("#queueButton").attr("Value", "Leave Queue");
+		}
+		
+		function meQueueLeave() {
+			var command = {
+				type: "queue",
+				action: "leave",
+				params: {
+					user: user
+				}
+			}
+			
+			socket.send(command);
+			
+			$("#queueButton").unbind("click");
+			$("#queueButton").bind("click", meQueueJoin);
+			$("#queueButton").attr("Value", "Join Queue");
+		}		
 	
-			var commands = require('./commands');
+		//****************************************************
+		// OpenTok Functions
+		//****************************************************
+		var session;
+						
+		var opentokInit = function (opentok) {
+			var apiKey = opentok.apiKey;
+			var sessionId = opentok.sessionId
+			var token = opentok.token;
 		
-			//****************************************************
-			// OpenTok Functions
-			//****************************************************				
-			var opentokInit = function (opentok, stream_name) {
-				var apiKey = opentok.apiKey;
-				var sessionId = opentok.sessionId
-				var token = opentok.token;
+			TB.addEventListener("exception", exceptionHandler);
+
+			if (TB.checkSystemRequirements() != TB.HAS_REQUIREMENTS) {
+				alert("You don't have the minimum requirements to run this application."
+					  + "Please upgrade to the latest version of Flash.");
+			} else {
+				// Initialize the session
+				session = TB.initSession(sessionId);
+
+				// Add event listeners to the session
+				session.addEventListener('sessionConnected', sessionConnectedHandler);
+				session.addEventListener('streamCreated', streamCreatedHandler);
+				session.addEventListener('streamDestroyed', streamDestroyedHandler);
+			}
 			
-				TB.addEventListener("exception", exceptionHandler);
+			session.connect(apiKey, token);		
+		}
+	
+		var sessionConnectedHandler = function (event) {
+			// TODO: Enable queue join button, move this logic not in opentok section (add another session connect handler)
+			$("#queueButton").bind('click', meQueueJoin);
+			
+			user.connectionId = session.connection.connectionId;
+			
+			// Publish my stream to the session
+			// publishStream();
+		
+			// Subscribe to all streams currently in the Session
+			// subscribeToStreams(event.streams);
+		}
 
-				if (TB.checkSystemRequirements() != TB.HAS_REQUIREMENTS) {
-					alert("You don't have the minimum requirements to run this application."
-						  + "Please upgrade to the latest version of Flash.");
-				} else {
-					// Initialize the session
-					session = TB.initSession(sessionId);
+		var streamCreatedHandler = function (event) {
+			// Subscribe to the newly created streams
+			// subscribeToStreams(event.streams);
+		}
 
-					// Add event listeners to the session
-					session.addEventListener('sessionConnected', sessionConnectedHandler);
-					session.addEventListener('streamCreated', streamCreatedHandler);
-					session.addEventListener('streamDestroyed', streamDestroyedHandler);
+		var streamDestroyedHandler = function (event) {	
+			// Get all destroyed streams		
+			for (var i = 0; i < event.streams.length; i++) {
+				// For each stream get the subscriber to that stream
+				var subscribers = session.getSubscribersForStream(event.streams[i]);
+				for (var j = 0; j < subscribers.length; j++) {
+					// Then remove each stream
+
 				}
+			}
+		}
+
+		var exceptionHandler = function (event) {
+			alert("Exception: " + event.code + "::" + event.message);
+		}
+
+		var publishStream = function () {
+			//session.publish("stream-" + myTeam.id, { name: myTeam.name });
+		}
+
+		var subscribeToStreams = function (streams) {
+			for (var i = 0; i < streams.length; i++) {
+				var stream = streams[i];
+				if (stream.connection.connectionId != session.connection.connectionId) {
+				//	var divId = "stream-" + findTeamIdByName(stream.name);
+						//session.subscribe(stream, divId);
+				}
+			}
+		}
 				
-				session.connect(apiKey, token);		
-			}
+		//****************************************************
+		// Socket.io Initialization
+		//****************************************************				
+		var socket = new io.Socket(null, {port: 7000, rememberTransport: false});
+	
+		// Build and send the initial command
+		(function() {
+			socket.on("message", messageHandler);
+			socket.connect();
 		
-			var sessionConnectedHandler = function (event) {
-				// Publish my stream to the session
-				publishStream();
+			function messageHandler(message) {
+				if (commands.validate(message)) {
+					commands.run(message);
+				} else {
+					alert("Invalid command received from server.");
+				}
+			}
 			
-				// Subscribe to all streams currently in the Session
-				subscribeToStreams(event.streams);
-			}
 
-			var streamCreatedHandler = function (event) {
-				// Subscribe to the newly created streams
-				subscribeToStreams(event.streams);
-			}
-
-			var streamDestroyedHandler = function (event) {	
-				// Get all destroyed streams		
-				for (var i = 0; i < event.streams.length; i++) {
-					// For each stream get the subscriber to that stream
-					var subscribers = session.getSubscribersForStream(event.streams[i]);
-					for (var j = 0; j < subscribers.length; j++) {
-						// Then remove each stream
-
-					}
-				}
-			}
-
-			var exceptionHandler = function (event) {
-				alert("Exception: " + event.code + "::" + event.message);
-			}
-
-			var publishStream = function () {
-				//session.publish("stream-" + myTeam.id, { name: myTeam.name });
-			}
-
-			var subscribeToStreams = function (streams) {
-				for (var i = 0; i < streams.length; i++) {
-					var stream = streams[i];
-					if (stream.connection.connectionId != session.connection.connectionId) {
-					//	var divId = "stream-" + findTeamIdByName(stream.name);
-							//session.subscribe(stream, divId);
-					}
-				}
-			}
-					
-			//****************************************************
-			// Socket.io Initialization
-			//****************************************************				
-			var socket = new io.Socket(null, {port: 7000, rememberTransport: false});
-		
-			// Build and send the initial command
-			(function() {
-				socket.on("message", messageHandler);
-				socket.connect();
-			
-				function messageHandler(message) {
-					if (commands.validate(message)) {
-						commands.run(message);
-					} else {
-						alert("Invalid command received from server.");
-					}
-				}
-			})();
 		})();
+	
 
 	</script>
 	
@@ -114,7 +226,9 @@
 <h1>Minute Of Fame</h1>
 
 	<div id="container">
-
+		<input type="button" id="queueButton" value="Join Queue"/>
+		<ol id="queue">
+		</ol>
 	</div>
 	
 </body>
