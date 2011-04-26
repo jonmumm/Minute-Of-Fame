@@ -1,0 +1,50 @@
+body {
+	font-family: Trebuchet MS, Tahoma, Verdana, Arial, sans-serif
+}
+
+#page-container {
+    width: 960px;
+    margin: 0 auto;
+    background: yellow;
+}
+
+#header {
+    height: 120px;
+    background: red;
+}
+
+#content {
+    height: 440px;
+    background: pink;
+}
+
+#main {
+    float: left;
+    height: 360px;
+}
+
+#sidebar-left, #sidebar-right {
+    float: left;
+    position: relative;
+    width: 240px;
+    height: 100%;
+    background: #CCC;
+}
+
+#publisher-container {
+    width: 480px;
+    background: blue;
+}
+
+h3 {
+    background: aqua;
+    font-size: 2.2em;
+    padding: .2em;
+}
+
+#queueButton {
+    position: absolute;
+    bottom: 0px;
+    height: 80px;
+    width: 100%;
+}

@@ -132,8 +132,9 @@ function queueJoin(params, client) {
 	
 	socket.broadcast(command);
 	
-	if (queue.length == 1) {
-		queueNext();
+	// If nobody is performing, start next performance
+	if (queue.length == 1 && performer == null) {
+		performanceNext();
 	}
 }
 
@@ -156,6 +157,10 @@ function queueNext() {
 	var client = socket.clientsIndex[queue[0].id];
 	client.send(command);
 }
+
+//****************************************************
+// Queue Command Senders
+//****************************************************
 
 //****************************************************
 // Queue Helper Functions
@@ -201,6 +206,7 @@ function performanceStart() {
 	socket.broadcast(command);
 }
 
+/*
 function performanceEnd() {
 	// TODO: Save performance to database
 	
@@ -212,55 +218,92 @@ function performanceEnd() {
 		}
 	}
 	
-	backstageCheckTimer(15);
+	stageCheckTimer(15);
+} */
+
+//****************************************************
+// Performance Command Senders
+//****************************************************
+function performanceIntro() {
+	var user = performance.user;
+	
+	var command = {
+		type: "performance",
+		action: "intro",
+		params: {
+			performance: performance;
+		}
+	}
+	
+	var client = socket.clientsIndex[user.id];
+	client.broadcast(command);
 }
 
 //****************************************************
-// Backstage Command Receivers
+// Performance Helper Functions
 //****************************************************
-var backstageCommands = {
-	status: backstageStatus,
+function performanceNext() {
+	// Set the next performance
+	var user = queue[0];
+	
+	performance = {
+		user: user,
+	}
+	
+	stageEnter();
+	performanceIntro();
 }
-commands.inject("backstage", backstageCommands);
 
-function backstageStatus(params, client) {
+//****************************************************
+// Stage Command Receivers
+//****************************************************
+var stageCommands = {
+	status: stageStatus,
+}
+commands.inject("stage", stageCommands);
+
+function stageStatus(params, client) {
 	var ready = params.ready;
 	
 	queueRemoveUser(queue[0]);
-	// TODO: Somewhere here we ahve to check if there are people in the queue before starting the next and backstage timer
+	// TODO: Somewhere here we ahve to check if there are people in the queue before starting the next and stage timer
 	queueNext();
 	
 	if (ready) {
 		performanceStart();
 	} else {
-		backstageCheckTimer(30);
+		stageCheckTimer(30);
 	}
 }
 
 //****************************************************
-// Backstage Command Senders
+// Stage Command Senders
 //****************************************************
-function backstageCheck() {
+function stageEnter() {
+	var user = performance.user;
+	
 	var command = {
-		type: "backstage",
-		action: "check",
+		type: "stage",
+		action: "enter",
 		params: {
-			user: queue[0],
+			performance: performance,
 		}
 	}
 	
-	var client = socket.clientsIndex[queue[0].id];
-	
+	var client = socket.clientsIndex[user.id];
 	client.send(command);
+	
+	stageCheckTimer(15);
 }
 
-function backstageCheckTimer(seconds) {
+
+function stageCheckTimer(seconds) {
 	setTimeout(function() {
-		backstageCheck();
+		stageCheck();
 	}, seconds * 1000);
 	
 	var command = {
-		type: "backstage",
+		type: "stage",
 		action: "checkTimer",
 		params: {
 			user: queue[0],

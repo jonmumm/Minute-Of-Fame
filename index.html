@@ -9,7 +9,12 @@
 	<script src="http://cdn.socket.io/stable/socket.io.js" type="text/javascript"></script>
 	<script type="text/javascript" src="/browserify.js?simple"></script>
 	<script src="http://staging.tokbox.com/v0.91/js/TB.min.js" type="text/javascript"></script>
-	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js" type="text/javascript"></script>
+	<script src="js/jquery-1.5.1.min.js" type="text/javascript"></script>
+	<script src="js/jquery-ui-1.8.12.custom.min.js" type="text/javascript"></script>
+	
+	<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/3.3.0/build/cssreset/reset-min.css">
+	<link rel="stylesheet" type="text/css" href="css/main.css" />
+	<link rel="Stylesheet" type="text/css" href="css/start/jquery-ui-1.8.12.custom.css"/>	
 	
 	<script>
 
@@ -17,7 +22,7 @@
 		
 		var opentok;
 		
-		var me;	
+		var me;
 		var queue;
 		
 		var opentok;
@@ -89,13 +94,15 @@
 		}
 		
 		function queueNext(params) {
-			backstageEnter();
+			stageEnter();
 		}
 		
 		//****************************************************
 		// Queue Command Senders
 		//****************************************************
-		function meQueueJoin() {
+		function meQueueJoin(name) {
+			me.name = name;
+			
 			var command = {
 				type: "queue",
 				action: "join",
@@ -140,23 +147,25 @@
 		}
 		
 		//****************************************************
-		// Backstage Command Receivers
+		// Stage Command Receivers
 		//****************************************************
-		var backstageCommands = {
-			check: backstageCheck,
-			checkTimer: backstageCheckTimer
+		var stageCommands = {
+			enter: stageEnter,
+			check: stageCheck,
+			// checkTimer: stageCheckTimer
 		}
-		commands.inject("backstage", backstageCommands);
+		commands.inject("stage", stageCommands);
 		
-		function backstageCheck(params) {
+		function stageCheck(params) {
 			var ready = cameraAllowed;
 
-			backstageStatus(ready);
+			stageStatus(ready);
 			
-			backstageLeave();
+			// stageLeave();
 		}
 		
-		function backstageCheckTimer(params) {
+		/*
+		function stageCheckTimer(params) {
 			var user = params.user;
 			
 			if (me.id == user.id) {
@@ -166,14 +175,14 @@
 			}
 			
 			// Start some timer
-		}
+		}*/
 		
 		//****************************************************
-		// Backstage Command Senders
+		// stage Command Senders
 		//****************************************************
-		function backstageStatus(ready) {
+		function stageStatus(ready) {
 			var command = {
-				type: "backstage",
+				type: "stage",
 				action: "status",
 				params: {
 					ready: ready,
@@ -184,16 +193,50 @@
 		}			
 		
 		//****************************************************
-		// Backstage Helper Functions
+		// stage Helper Functions
 		//****************************************************		
-		function backstageEnter() {			
-			$("#backstageContainer").show('slow');
+		function stageEnter() {			
+			$("#stageDialog").dialog({
+				autoopen: false,
+				title: "stage",
+				closeOnEscape: false,
+				open: function(event, ui) { $(".ui-dialog-titlebar-close").hide(); },
+				height: 300,
+				width: 400,
+				// resize: function(event, ui) { console.log(event); },
+			});
 			
-			session.publish("publisher");
+			var publisher = session.publish("stagePublisher");
+			
+			$("#stageDialog").dialog('open');
+			//$("#" + publisher.id).attr("width", "100%");
+			//$("#" + publisher.id).attr(width, "100%");
+			//$("#" + publisher.id).removeAttr(width);
+			//$("#" + publisher.id).removeAttr(width);
+			
+			//$("#" + publisher.id).width = 800;
+			
+			/*
+			var obj = document.getElementById(publisher.id);
+			obj.width = 800;
+			obj.height = 800; */
+			//console.log(obj);
+			
+			setTimeout(stageLeave, 10000);
 		}
 		
-		function backstageLeave() {			
-			$("#backstageContainer").hide('slow');
+		function stageLeave() {			
+			// $("#stageContainer").hide('slow');
+			//var dialog = $("#stageDialog").dialog('widget')[0];
+			//$(dialog).removeClass('ui-draggable');
+			//$(dialog).removeClass('ui-resizable');
+			//$("#stageDialog").dialog('close');
+			//$("#stageDialog").dialog('open');
+			
+		}
+		
+		function stageResizeVideo() {
+			
 		}
 	
 		//****************************************************
@@ -227,7 +270,7 @@
 		var sessionConnectedHandler = function (event) {
 			// TODO: Enable queue join button, move this logic not in opentok section (add another session connect handler)
 			$("#queueButton").attr('disabled', '');
-			$("#queueButton").bind('click', meQueueJoin);
+			
 			
 			me.connectionId = session.connection.connectionId;
 			
@@ -301,6 +344,32 @@
 			
 
 		})();
+		
+		$(window).load(function() {
+			$("#queueButton").button( {
+				label: "Join Queue",
+			});
+			$("#queueButton").bind('click', function() {
+				$("#joinQueueDialog").dialog( {
+					title: "Join Queue",
+					resizable: false,
+					buttons: {
+						"Join": function() {
+							// TODO: Validate
+							
+							// Enter Queue
+							var name = $("#name").val();
+							
+							meQueueJoin(name);
+							$(this).dialog("close");
+						},
+						"Cancel": function() {
+							$(this).dialog("close");
+						}
+					},
+				});
+			});
+		});
 	
 
 	</script>
@@ -309,19 +378,44 @@
 
 
 <body>
-<h1>Minute Of Fame</h1>
-
-	<div id="container">
-		<div id="publisher"></div>
-		<div id="backstageContainer" style="display: none;">
-			<h2>Backstage</h2>
+	<div id="page-container">
+		<div id="header"></div>
+		<div id="content">
+			<div id="sidebar-left"></div>
+			<div id="main">
+				<div id="publisher-container">
+					<div id="publisher"></div>
+				</div>
+				<div id="description"></div>				
+			</div>
+			<div id="sidebar-right">
+				<h3>Queue</h3>
+				<button id="queueButton"></button>
+			</div>
 		</div>
+		
+
 		<div class="queue">
 			<h2>Queue</h2>
-			<input type="button" id="queueButton" value="Join Queue" disabled="disabled"/>
+			
 			<ol>
 			</ol>
 		</div>
+	</div>
+	
+	<div id="joinQueueDialog" style="display: none;">
+		<p class="validateTips">All form fields are required.</p>
+		<form>
+			<fieldset>
+				<label for="name">Name</label>
+				<input type="text" name="name" id="name" class="text ui-widget-content ui-corner-all">
+			</fieldset>
+		</form>
+	</div>
+	
+	<div id="stageDialog" style="display: none; width: 100%; height: 100%">
+		<h2>You are up next</h2>
+		<div id="sstagetagePublisher"></div>
 	</div>
 	
 </body>
