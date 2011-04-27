@@ -1,6 +1,8 @@
 var Commands = {};
 
 function validate(command) {
+	console.log(command);
+	
 	// Check that the message is a command
 	if (!command.hasOwnProperty("type") || !command.hasOwnProperty("action") || !command.hasOwnProperty("params")) {		
 		return false;
@@ -15,7 +17,6 @@ function validate(command) {
 }
 
 function run(command, client) {
-	console.log(command);
 	if (client) {
 		Commands[command.type][command.action](command.params, client);
 	} else {

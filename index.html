@@ -14,22 +14,16 @@
 	
 	<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/3.3.0/build/cssreset/reset-min.css">
 	<link rel="stylesheet" type="text/css" href="css/main.css" />
-	<link rel="Stylesheet" type="text/css" href="css/start/jquery-ui-1.8.12.custom.css"/>	
+	<link rel="stylesheet" type="text/css" href="css/start/jquery-ui-1.8.12.custom.css"/>	
 	
 	<script>
 
 		var commands = require('./commands');
 		
+		var performance;
 		var opentok;
-		
-		var me;
-		var queue;
-		
-		var opentok;
-		
-		var stream;
-		
-		var cameraAllowed = false;
+		var queue;		
+		var me;		
 		
 		//****************************************************
 		// Session Command Receivers
@@ -40,10 +34,12 @@
 		commands.inject("session", sessionCommands);
 
 		function sessionJoin(params) {
-			var performance = params.performance;
+			performance = params.performance;
 			opentok = params.opentok;
 			queue = params.queue;
 			me = params.user;
+			
+			performanceRefreshDisplay(performance);
 			
 			for (var i = 0; i < queue.length; i++) {
 				queueAddUserToDisplay(queue[i]);
@@ -57,16 +53,72 @@
 		//****************************************************
 		var performanceCommands = {
 			start: performanceStart,
+			cancel: performanceCancel,
 			end: performanceEnd,
+			intro: performanceIntro,
 		}
 		commands.inject("performance", performanceCommands);
 
 		function performanceStart(params) {
-			var performance = params.performance;			
+			var performance = params.performance;
+			var user = params.performance.user;
+			
+			if (user.id == me.id) {
+				alert ("My performance is starting");
+				// TODO: Enable audio
+			} else {
+				performanceRefreshDisplay(performance);
+			}
+						
+		}
+		
+		function performanceCancel(params) {
+			var performance = params.performance;
+			
+			performanceRefreshDisplay(performance);
 		}
 		
 		function performanceEnd(params) {
 			var performance = params.performance;
+			
+			performanceRefreshDisplay(performance);
+		}
+		
+		function performanceIntro(params) {
+			var performance = params.performance;
+			var user = params.performance.user;
+			
+			performanceRefreshDisplay(performance);
+			
+			// TODO: Start a timer
+		}
+		
+		//****************************************************
+		// Performance Command Senders
+		//****************************************************
+		function performanceCancel() {
+			var command = {
+				type: "performance",
+				action: "cancel",
+				params: {},
+			}
+			
+			socket.send(command);
+		}
+		
+		//****************************************************
+		// Performance Helper Functions
+		//****************************************************
+		function performanceRefreshDisplay(performance) {
+			if (performance.ongoing) {
+				if (!performance.staging) {
+					alert("Somebody is performing");
+				} else {
+					alert("Somebody is about to perform");
+				}
+			} else {
+				alert("Nobody is performing right now");
+			}
 		}
 		
 		//****************************************************
@@ -90,7 +142,10 @@
 		function queueLeave(params) {
 			var user = params.user;
 			
-			$("#queue-" + user.id).remove();
+			queueRemoveUserFromDisplay(user);
+			
+			var index = queueFindIndex(user);
+			queue.splice(index, 1);
 		}
 		
 		function queueNext(params) {
@@ -113,9 +168,7 @@
 			
 			socket.send(command);
 			
-			$("#queueButton").unbind("click");
-			$("#queueButton").bind("click", meQueueLeave);
-			$("#queueButton").attr("Value", "Leave Queue");
+			queueButtonEnableLeave();
 		}
 		
 		function meQueueLeave() {
@@ -129,9 +182,7 @@
 			
 			socket.send(command);
 			
-			$("#queueButton").unbind("click");
-			$("#queueButton").bind("click", meQueueJoin);
-			$("#queueButton").attr("Value", "Join Queue");
+			queueButtonEnableJoin();
 		}
 		
 		//****************************************************
@@ -140,10 +191,41 @@
 		function queueAddUserToDisplay(user) {
 			var li = $("<li/>", {
 				id: "queue-" + user.id,
-				text: user.id,
+				text: user.name,
 			});
 
 			li.appendTo(".queue ol");			
+		}
+		
+		function queueRemoveUserFromDisplay(user) {
+			$("#queue-" + user.id).remove();
+			
+			if (user.id == me.id) {
+				queueButtonEnableJoin();
+			}
+		}
+		
+		function queueFindIndex(user) {
+			for (var i = 0; i < queue.length; i++) {
+				if (user.id == queue[i].id) return i;
+			}
+
+			return -1;
+		}
+		
+		function queueButtonEnableJoin() {
+			$("#queueButton").button('enable');
+			$("#queueButton").unbind("click");
+			$("#queueButton").bind('click', function() {
+				$("#joinQueueDialog").dialog('open');
+			});
+			$("#queueButton span").text("Join Queue");
+		}
+		
+		function queueButtonEnableLeave() {
+			$("#queueButton").unbind("click");
+			$("#queueButton").bind("click", meQueueLeave);
+			$("#queueButton span").text("Leave Queue");
 		}
 		
 		//****************************************************
@@ -151,20 +233,18 @@
 		//****************************************************
 		var stageCommands = {
 			enter: stageEnter,
-			check: stageCheck,
-			// checkTimer: stageCheckTimer
+			checkTimer: stageCheckTimer
 		}
 		commands.inject("stage", stageCommands);
 		
-		function stageCheck(params) {
-			var ready = cameraAllowed;
-
-			stageStatus(ready);
+		function stageEnter() {	
+			$("#stageDialog").dialog("open");
 			
-			// stageLeave();
-		}
+			var publisher = session.publish("stagePublisher");
+			
+			//setTimeout(stageLeave, 10000);
+		}		
 		
-		/*
 		function stageCheckTimer(params) {
 			var user = params.user;
 			
@@ -175,10 +255,10 @@
 			}
 			
 			// Start some timer
-		}*/
+		}
 		
 		//****************************************************
-		// stage Command Senders
+		// Stage Command Senders
 		//****************************************************
 		function stageStatus(ready) {
 			var command = {
@@ -191,53 +271,6 @@
 			
 			socket.send(command);
 		}			
-		
-		//****************************************************
-		// stage Helper Functions
-		//****************************************************		
-		function stageEnter() {			
-			$("#stageDialog").dialog({
-				autoopen: false,
-				title: "stage",
-				closeOnEscape: false,
-				open: function(event, ui) { $(".ui-dialog-titlebar-close").hide(); },
-				height: 300,
-				width: 400,
-				// resize: function(event, ui) { console.log(event); },
-			});
-			
-			var publisher = session.publish("stagePublisher");
-			
-			$("#stageDialog").dialog('open');
-			//$("#" + publisher.id).attr("width", "100%");
-			//$("#" + publisher.id).attr(width, "100%");
-			//$("#" + publisher.id).removeAttr(width);
-			//$("#" + publisher.id).removeAttr(width);
-			
-			//$("#" + publisher.id).width = 800;
-			
-			/*
-			var obj = document.getElementById(publisher.id);
-			obj.width = 800;
-			obj.height = 800; */
-			//console.log(obj);
-			
-			setTimeout(stageLeave, 10000);
-		}
-		
-		function stageLeave() {			
-			// $("#stageContainer").hide('slow');
-			//var dialog = $("#stageDialog").dialog('widget')[0];
-			//$(dialog).removeClass('ui-draggable');
-			//$(dialog).removeClass('ui-resizable');
-			//$("#stageDialog").dialog('close');
-			//$("#stageDialog").dialog('open');
-			
-		}
-		
-		function stageResizeVideo() {
-			
-		}
 	
 		//****************************************************
 		// OpenTok Functions
@@ -269,34 +302,29 @@
 	
 		var sessionConnectedHandler = function (event) {
 			// TODO: Enable queue join button, move this logic not in opentok section (add another session connect handler)
-			$("#queueButton").attr('disabled', '');
-			
+			queueButtonEnableJoin();
 			
 			me.connectionId = session.connection.connectionId;
-			
-			// Publish my stream to the session
-			// publishStream();
-		
-			// Subscribe to all streams currently in the Session
-			// subscribeToStreams(event.streams);
 		}
 
 		var streamCreatedHandler = function (event) {
 			for (var i = 0; i < event.streams.length; i++) {
-				if (event.streams[i].connection.connectionId != session.connection.connectionId) {
-					stream = stream[i];
+				if (event.streams[i].connection.connectionId == session.connection.connectionId) {					
+					// Tell the server that our camera is ready
+					stageStatus(true);
 				} else {
-					cameraAllowed = true;
+					// Subscribe to the stream and hide it
+					//stream = stream[i];
 				}
 			}			
 						
 			// Subscribe to the newly created streams
-			// subscribeToStreams(event.streams);
+			// subscribeToStreamss(event.streams);
 		}
 
 		var streamDestroyedHandler = function (event) {	
 			// Get all destroyed streams		
-			for (var i = 0; i < event.streams.length; i++) {
+			for (var i = 0; i < event.streams.length; i++) {		
 				// For each stream get the subscriber to that stream
 				var subscribers = session.getSubscribersForStream(event.streams[i]);
 				for (var j = 0; j < subscribers.length; j++) {
@@ -346,31 +374,64 @@
 		})();
 		
 		$(window).load(function() {
+			
+			// Run initializers
+			initDialogs();
+			initButtons();
+			
+			// Set up click handlers			
+		});
+		
+		//****************************************************
+		// Socket.io Initialization
+		//****************************************************
+		function initDialogs() {
+			// Queue Dialog
+			$("#joinQueueDialog").dialog( {
+				autoOpen: false,
+				modal: true,
+				title: "Join Queue",
+				resizable: false,
+				buttons: {
+					"Join": function() {
+						// TODO: Validate
+						
+						// Enter Queue
+						var name = $("#name").val();
+						
+						meQueueJoin(name);
+						$(this).dialog("close");
+					},
+					"Cancel": function() {
+						$(this).dialog("close");
+					}
+				},
+			});	
+			
+			// Stage Dialog
+			$("#stageDialog").dialog({
+				autoOpen: false,
+				title: "Your Stage",
+				closeOnEscape: false,
+				open: function(event, ui) { $(".ui-dialog-titlebar-close").hide(); },
+				height: 600,
+				width: 800,
+				modal: true,
+				buttons: {
+					"Quit Performance": function() {
+						performanceCancel();
+						$(this).dialog("close");
+					}
+				}
+			});		
+		}
+		
+		function initButtons() {
 			$("#queueButton").button( {
+				disabled: true,
 				label: "Join Queue",
 			});
-			$("#queueButton").bind('click', function() {
-				$("#joinQueueDialog").dialog( {
-					title: "Join Queue",
-					resizable: false,
-					buttons: {
-						"Join": function() {
-							// TODO: Validate
-							
-							// Enter Queue
-							var name = $("#name").val();
-							
-							meQueueJoin(name);
-							$(this).dialog("close");
-						},
-						"Cancel": function() {
-							$(this).dialog("close");
-						}
-					},
-				});
-			});
-		});
-	
+		}
 
 	</script>
 	
@@ -389,17 +450,12 @@
 				<div id="description"></div>				
 			</div>
 			<div id="sidebar-right">
-				<h3>Queue</h3>
-				<button id="queueButton"></button>
+				<div class="queue">
+					<h3>Queue</h3>
+					<ol></ol>
+					<button id="queueButton"></button>
+				</div>
 			</div>
-		</div>
-		
-
-		<div class="queue">
-			<h2>Queue</h2>
-			
-			<ol>
-			</ol>
 		</div>
 	</div>
 	
@@ -414,8 +470,7 @@
 	</div>
 	
 	<div id="stageDialog" style="display: none; width: 100%; height: 100%">
-		<h2>You are up next</h2>
-		<div id="sstagetagePublisher"></div>
+		<div id="stagePublisher"></div>
 	</div>
 	
 </body>

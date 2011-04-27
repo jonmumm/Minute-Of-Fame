@@ -41,10 +41,9 @@ var opentok = {
 var socket;
 
 var queue = new Array();
-
-var performance = {};
-
 var users = {};
+var performance = {};
+performance.ongoing = false;
 
 //****************************************************
 // Session Helper Functions
@@ -76,11 +75,18 @@ function sessionJoin(client) {
 function sessionLeave(client) {
 	var user = users[client.sessionId];
 	
-	// Remove user from queue (if user is in it)
-	queueRemoveUser(user, client);
+	// Remove user from queue if user is in it
+	if (queueFindIndex(user) >= 0) {
+		queueRemoveUser(user);
+	}
 	
-	// TODO: Check if the user is the one performing
-	
+	if (performance.ongoing) {
+		// If user is performing, cancel performance
+		if (performance.user.id == user.id) {
+			performanceCancel();
+		}
+	}
+
 	// TODO: Maybe broadcast user has left to decrement user count
 }
 
@@ -133,12 +139,12 @@ function queueJoin(params, client) {
 	socket.broadcast(command);
 	
 	// If nobody is performing, start next performance
-	if (queue.length == 1 && performer == null) {
+	if (queue.length == 1 && !performance.ongoing) {
 		performanceNext();
 	}
 }
 
-function queueLeave(params, client) {
+function queueLeave(params) {
 	var user = params.user;
 	
 	queueRemoveUser(user);
@@ -159,18 +165,12 @@ function queueNext() {
 }
 
 //****************************************************
-// Queue Command Senders
-//****************************************************
-
-//****************************************************
 // Queue Helper Functions
 //****************************************************
 function queueRemoveUser(user) {
 	var index = queueFindIndex(user);
 	
-	if (index >= 0) {
-		queue.splice(index, 1);
-	}
+	queue.splice(index, 1);
 	
 	var command = {
 		type: "queue",
@@ -194,32 +194,30 @@ function queueFindIndex(user) {
 //****************************************************
 // Performance Command Receivers
 //****************************************************
-function performanceStart() {
+var performanceCommands = {
+	cancel: performanceCancel,
+}
+commands.inject("performance", performanceCommands);
+
+function performanceCancel(params, client) {	
+	// Mark as not performing
+	performance.ongoing = false;
+	
 	var command = {
 		type: "performance",
-		action: "start",
+		actions: "cancel",
 		params: {
 			performance: performance,
 		}
 	}
 	
 	socket.broadcast(command);
-}
-
-/*
-function performanceEnd() {
+	
 	// TODO: Save performance to database
 	
-	var command = {
-		type: "performance",
-		action: "end",
-		params: {
-			performance: performance,
-		}
-	}
-	
-	stageCheckTimer(15);
-} */
+	// Start the next performance
+	performanceNext();
+}
 
 //****************************************************
 // Performance Command Senders
@@ -231,7 +229,7 @@ function performanceIntro() {
 		type: "performance",
 		action: "intro",
 		params: {
-			performance: performance;
+			performance: performance,
 		}
 	}
 	
@@ -239,19 +237,60 @@ function performanceIntro() {
 	client.broadcast(command);
 }
 
+function performanceStart() {
+	// Mark that we have left staging
+	performance.staging = false;
+
+	var command = {
+		type: "performance",
+		action: "start",
+		params: {
+			performance: performance,
+		}
+	}
+	
+	socket.broadcast(command);
+}
+
+function performanceEnd() {
+	performance.ongoing = false;
+	
+	var command = {
+		type: "performance",
+		action: "end",
+		params: {
+			performance: performance,
+		}
+	}
+	
+	socket.broadcast(command);
+	
+	// TODO: Save performance to database
+	
+	// Start the next performance
+	performanceNext();
+}
+
 //****************************************************
 // Performance Helper Functions
 //****************************************************
 function performanceNext() {
-	// Set the next performance
-	var user = queue[0];
-	
-	performance = {
-		user: user,
+	// If there are people in the queue
+	if (queue.length > 0) {
+		// Get the next perfomer
+		var user = queue[0];
+
+		// Update the performance object
+		performance.ongoing = true;
+		performance.staging = true;
+		performance.user = user;
+
+		// Put the performer on stage
+		stageEnter();
+		
+		// Start the performance introduction
+		performanceIntro();		
 	}
-	
-	stageEnter();
-	performanceIntro();
 }
 
 //****************************************************
@@ -262,18 +301,11 @@ var stageCommands = {
 }
 commands.inject("stage", stageCommands);
 
+// Update the ready variable from the performer on stage
 function stageStatus(params, client) {
 	var ready = params.ready;
 	
-	queueRemoveUser(queue[0]);
-	// TODO: Somewhere here we ahve to check if there are people in the queue before starting the next and stage timer
-	queueNext();
-	
-	if (ready) {
-		performanceStart();
-	} else {
-		stageCheckTimer(30);
-	}
+	performance.user.ready = ready;
 }
 
 //****************************************************
@@ -296,7 +328,6 @@ function stageEnter() {
 	stageCheckTimer(15);
 }
 
-
 function stageCheckTimer(seconds) {
 	setTimeout(function() {
 		stageCheck();
@@ -310,7 +341,16 @@ function stageCheckTimer(seconds) {
 		}
 	}
 	
-	socket.send(command);
+	socket.broadcast(command);
+}
+
+function stageCheck() {
+	// Check if performer is ready
+	if (performance.user.ready) {
+		performanceStart();
+	} else {
+		performanceNext();
+	}
 }
 
 
