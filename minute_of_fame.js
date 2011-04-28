@@ -343,6 +343,7 @@ function stageCheckTimer(seconds) {
 		action: "checkTimer",
 		params: {
 			performance: performance,
+			seconds: seconds,
 		}
 	}
 	

@@ -1,5 +1,6 @@
 var connect = require("connect");
 var io = require("socket.io");
+var facebookClient = require("facebook-js");
 
 function start(controller) {
 
@@ -12,7 +13,7 @@ function start(controller) {
 		mount: '/browserify.js',
 	}));
 	
-	server.listen(7000); // Start server on port 5001
+	server.listen(80); // Start server on port 5001
 	
 	var socket = io.listen(server);
 	socket.on('connection', function(client) {
