@@ -20,7 +20,16 @@ body {
 
 #main {
     float: left;
-    height: 360px;
+	position: relative;
+    height: 440px;
+}
+
+#description {
+	position: absolute;
+	bottom: 0px;
+	height: 80px;
+	width: 100%;
+	background: black;
 }
 
 #sidebar-left, #sidebar-right {

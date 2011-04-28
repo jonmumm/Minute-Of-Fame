@@ -205,7 +205,7 @@ function performanceCancel(params, client) {
 	
 	var command = {
 		type: "performance",
-		actions: "cancel",
+		action: "cancel",
 		params: {
 			performance: performance,
 		}
@@ -284,6 +284,9 @@ function performanceNext() {
 		performance.ongoing = true;
 		performance.staging = true;
 		performance.user = user;
+		
+		// Remove the user from the queue
+		queueRemoveUser(user);
 
 		// Put the performer on stage
 		stageEnter();
@@ -325,10 +328,12 @@ function stageEnter() {
 	var client = socket.clientsIndex[user.id];
 	client.send(command);
 	
-	stageCheckTimer(15);
+	stageCheckTimer(10);
 }
 
 function stageCheckTimer(seconds) {
+	var user = performance.user;
+	
 	setTimeout(function() {
 		stageCheck();
 	}, seconds * 1000);
@@ -337,11 +342,12 @@ function stageCheckTimer(seconds) {
 		type: "stage",
 		action: "checkTimer",
 		params: {
-			user: queue[0],
+			performance: performance,
 		}
 	}
 	
-	socket.broadcast(command);
+	var client = socket.clientsIndex[user.id];
+	client.send(command);
 }
 
 function stageCheck() {
@@ -349,7 +355,7 @@ function stageCheck() {
 	if (performance.user.ready) {
 		performanceStart();
 	} else {
-		performanceNext();
+		performanceCancel();
 	}
 }
 
